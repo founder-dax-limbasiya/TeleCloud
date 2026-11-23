@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
@@ -243,7 +244,7 @@ object ApiKeyFactory {
     }
 }
 
-private enum class Tab { HOME, PROJECTS, TELEGRAM }
+private enum class Tab { HOME, PROJECTS, TELEGRAM, GITHUB }
 
 @Composable
 private fun TeleCloudApp(store: ProjectStore, vault: SecureVault) {
@@ -309,6 +310,7 @@ private fun TeleCloudApp(store: ProjectStore, vault: SecureVault) {
                             onCreate = { showCreate = true },
                             onOpenProject = { selectedProjectId = it }
                         )
+                        Tab.GITHUB -> GitHubScreen(vault = vault)
                         Tab.TELEGRAM -> TelegramScreen(
                             vault = vault,
                             statusMessage = statusMessage,
@@ -337,6 +339,12 @@ private fun TeleCloudApp(store: ProjectStore, vault: SecureVault) {
                             onClick = { tab = Tab.PROJECTS; selectedProjectId = null },
                             icon = { Icon(Icons.Outlined.Folder, contentDescription = "Projects") },
                             label = { Text("Projects") }
+                        )
+                        NavigationBarItem(
+                            selected = tab == Tab.GITHUB,
+                            onClick = { tab = Tab.GITHUB; selectedProjectId = null },
+                            icon = { Icon(Icons.Outlined.Code, contentDescription = "GitHub Actions") },
+                            label = { Text("GitHub") }
                         )
                         NavigationBarItem(
                             selected = tab == Tab.TELEGRAM,
