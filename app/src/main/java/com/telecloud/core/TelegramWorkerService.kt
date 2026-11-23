@@ -1,0 +1,195 @@
+package com.telecloud.core
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Intent
+import android.os.Build
+import android.os.IBinder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+object TelegramApi {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(35, TimeUnit.SECONDS)
+        .callTimeout(40, TimeUnit.SECONDS)
+        .build()
+
+    private fun endpoint(token: String, method: String): String {
+        return "https://api.telegram.org/bot" + token + "/" + method
+    }
+
+    private fun readJson(request: Request): JSONObject {
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string() ?: throw IOException("Telegram returned an empty response")
+            val json = JSONObject(body)
+            if (!response.isSuccessful || !json.optBoolean("ok", false)) {
+                val description = json.optString("description", "Telegram request failed")
+                throw IOException(description)
+            }
+            return json
+        }
+    }
+
+    fun getMe(token: String): String {
+        val request = Request.Builder().url(endpoint(token, "getMe")).get().build()
+        val result = readJson(request).optJSONObject("result") ?: JSONObject()
+        val username = result.optString("username", "connected bot")
+        return "Connected successfully: @" + username
+    }
+
+    fun getUpdates(token: String, offset: Long): JSONObject {
+        val url = endpoint(token, "getUpdates") + "?timeout=20&offset=" + offset
+        val request = Request.Builder().url(url).get().build()
+        return readJson(request)
+    }
+
+    fun sendMessage(token: String, chatId: String, message: String) {
+        val body = FormBody.Builder()
+            .add("chat_id", chatId)
+            .add("text", message)
+            .build()
+        val request = Request.Builder()
+            .url(endpoint(token, "sendMessage"))
+            .post(body)
+            .build()
+        readJson(request)
+    }
+}
+
+class TelegramWorkerService : Service() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var pollingJob: Job? = null
+    private val channelId = "telecloud_worker"
+    private val notificationId = 2410
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val vault = SecureVault(this)
+        val token = vault.get("bot_token")
+        val allowedChatId = vault.get("allowed_chat_id")
+        if (token.isBlank() || allowedChatId.isBlank()) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        startForeground(notificationId, buildNotification("Connected worker is waiting for Telegram commands"))
+        pollingJob?.cancel()
+        pollingJob = scope.launch { poll(token, allowedChatId) }
+        return START_STICKY
+    }
+
+    private suspend fun poll(token: String, allowedChatId: String) {
+        var offset = 0L
+        while (scope.isActive) {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    TelegramApi.getUpdates(token, offset)
+                }
+                val updates = response.optJSONArray("result")
+                if (updates != null) {
+                    for (index in 0 until updates.length()) {
+                        val update = updates.optJSONObject(index) ?: continue
+                        val updateId = update.optLong("update_id", -1L)
+                        if (updateId >= 0L) offset = maxOf(offset, updateId + 1L)
+                        val message = update.optJSONObject("message") ?: continue
+                        val chat = message.optJSONObject("chat") ?: continue
+                        val incomingChatId = chat.optString("id")
+                        if (incomingChatId != allowedChatId) continue
+
+                        val text = message.optString("text").trim()
+                        if (!text.startsWith("/tc")) continue
+                        val command = text.removePrefix("/tc").trim().substringBefore("@").trim().lowercase()
+                        val reply = commandReply(command)
+                        withContext(Dispatchers.IO) {
+                            TelegramApi.sendMessage(token, incomingChatId, reply)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                delay(4000L)
+            }
+        }
+    }
+
+    private fun commandReply(command: String): String {
+        return when (command) {
+            "", "help" -> {
+                "TeleCloud worker commands:\n/tc status\n/tc projects\n/tc ping\n/tc help"
+            }
+            "status" -> {
+                "TeleCloud worker is online on this Android device. This is a device worker, not a hosted VPS."
+            }
+            "projects" -> {
+                val projects = ProjectStore(this).load()
+                if (projects.isEmpty()) {
+                    "No projects have been created on this device yet."
+                } else {
+                    "Projects on this device:\n" + projects.joinToString("\n") { "- " + it.name }
+                }
+            }
+            "ping" -> {
+                "Pong. Phone worker received your command at " +
+                    java.text.DateFormat.getDateTimeInstance().format(java.util.Date()) + "."
+            }
+            else -> "Unknown command. Send /tc help for the available commands."
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "TeleCloud worker",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(message: String): Notification {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, channelId)
+                .setContentTitle("TeleCloud worker active")
+                .setContentText(message)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setOngoing(true)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+                .setContentTitle("TeleCloud worker active")
+                .setContentText(message)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setOngoing(true)
+                .build()
+        }
+    }
+
+    override fun onDestroy() {
+        pollingJob?.cancel()
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+}
