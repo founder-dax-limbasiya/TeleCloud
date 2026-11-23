@@ -98,6 +98,17 @@ class TelegramWorkerService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Android 15 enforces a rolling six-hour-per-24-hour budget for dataSync
+     * foreground services when targeting API 35+. Stop cleanly when the OS
+     * reports that budget has expired; this is not a mechanism for 24/7 work.
+     */
+    override fun onTimeout(startId: Int, foregroundServiceType: Int) {
+        pollingJob?.cancel()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
+    }
+
     private suspend fun poll(token: String, allowedChatId: String) {
         var offset = 0L
         while (scope.isActive) {
