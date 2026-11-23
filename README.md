@@ -27,6 +27,7 @@ This is an early device-worker prototype, **not a drop-in Oracle Cloud replaceme
 - The current API keys are local credentials stored in the app. They are not yet validated by a remote API gateway or attached to a hosted endpoint.
 - The Android worker currently supports the listed safe built-in commands. It does not execute arbitrary scripts, containers, or application servers.
 - The phone must be online and the worker service must remain allowed by Android. Battery optimisation, OS background limits, reboots, and connectivity can interrupt it.
+- Because this prototype declares a `dataSync` foreground service and targets API 35, Android 15+ limits that service type to a total of 6 hours per app per rolling 24-hour period. TeleCloud now stops cleanly when Android reports that timeout; it cannot promise a continuously running 24/7 phone worker.
 - This cannot promise unlimited storage, unlimited compute, or 24/7 availability. Free/open-source software does not remove hardware and platform limits.
 
 These boundaries are intentional: the first milestone proves project isolation, local credential handling, and Telegram command transport without pretending a phone or Telegram is an always-on VPS.
