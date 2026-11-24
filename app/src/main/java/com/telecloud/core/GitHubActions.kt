@@ -286,7 +286,7 @@ fun GitHubScreen(vault: SecureVault) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("GitHub Actions", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Text(
-                    "Control your repository builds from this phone.",
+                    "Optional add-on: run GitHub Actions builds from this phone. Telegram remains the primary control channel.",
                     fontSize = 12.sp,
                     color = GitHubMuted
                 )
@@ -301,7 +301,7 @@ fun GitHubScreen(vault: SecureVault) {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Connect a repository", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Optional GitHub connection", fontWeight = FontWeight.Bold, color = Color.White)
                     Text(
                         "Use a fine-grained GitHub personal access token limited to the repository you want to control.",
                         color = GitHubMuted,
