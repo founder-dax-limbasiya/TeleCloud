@@ -21,6 +21,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 object TelegramApi {
@@ -109,22 +110,31 @@ class TelegramWorkerService : Service() {
         stopSelf(startId)
     }
 
-    private fun nextUpdateOffset(): Long {
+    private fun updateCursorKey(token: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(token.toByteArray(Charsets.UTF_8))
+        val fingerprint = digest.take(8).joinToString("") {
+            (it.toInt() and 0xff).toString(16).padStart(2, '0')
+        }
+        return "last_handled_update_id_$fingerprint"
+    }
+
+    private fun nextUpdateOffset(token: String): Long {
         val lastHandled = getSharedPreferences("telecloud_telegram_state", MODE_PRIVATE)
-            .getLong("last_handled_update_id", -1L)
+            .getLong(updateCursorKey(token), -1L)
         return lastHandled + 1L
     }
 
-    private fun acknowledgeUpdate(updateId: Long) {
+    private fun acknowledgeUpdate(token: String, updateId: Long) {
         // Persist before the next getUpdates call acknowledges this update to Telegram.
         getSharedPreferences("telecloud_telegram_state", MODE_PRIVATE)
             .edit()
-            .putLong("last_handled_update_id", updateId)
+            .putLong(updateCursorKey(token), updateId)
             .commit()
     }
 
     private suspend fun poll(token: String, allowedChatId: String) {
-        var offset = nextUpdateOffset()
+        var offset = nextUpdateOffset(token)
         while (scope.isActive) {
             try {
                 val response = withContext(Dispatchers.IO) {
@@ -156,7 +166,7 @@ class TelegramWorkerService : Service() {
                             }
                         }
 
-                        acknowledgeUpdate(updateId)
+                        acknowledgeUpdate(token, updateId)
                         offset = maxOf(offset, updateId + 1L)
                     }
                 }
