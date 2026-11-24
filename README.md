@@ -16,6 +16,8 @@ TeleCloud is an open-source experiment for managing multiple project workspaces 
   - `/tc help`
   - `/tc status`
   - `/tc projects`
+  - `/tc create <name>` — create a project from Telegram
+  - `/tc project <name>` — view one project's description and API-key count
   - `/tc ping`
 - GitHub Actions workflow that builds a debug APK and uploads it as a workflow artifact. No app deployment is configured.
 - Optional GitHub Actions control screen: connect a repository with a fine-grained token, list workflows, inspect recent runs, and trigger workflows on a selected branch. Skip this entirely if you only want Telegram control.
@@ -28,6 +30,7 @@ This is an early device-worker prototype, **not a drop-in Oracle Cloud replaceme
 - The current API keys are local credentials stored in the app. They are not yet validated by a remote API gateway or attached to a hosted endpoint.
 - GitHub integration currently uses a user-supplied fine-grained personal access token stored encrypted on this device. It is suitable for an owner-operated prototype, not yet a multi-user OAuth integration.
 - The Android worker currently supports the listed safe built-in commands. It does not execute arbitrary scripts, containers, or application servers.
+- Telegram update offsets are persisted per bot token so restarting the worker does not normally replay already handled updates. Project creation and inspection are local-device operations.
 - The phone must be online and the worker service must remain allowed by Android. Battery optimisation, OS background limits, reboots, and connectivity can interrupt it.
 - Because this prototype declares a `dataSync` foreground service and targets API 35, Android 15+ limits that service type to a total of 6 hours per app per rolling 24-hour period. TeleCloud now stops cleanly when Android reports that timeout; it cannot promise a continuously running 24/7 phone worker.
 - This cannot promise unlimited storage, unlimited compute, or 24/7 availability. Free/open-source software does not remove hardware and platform limits.
