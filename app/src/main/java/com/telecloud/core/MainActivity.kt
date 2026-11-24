@@ -811,11 +811,13 @@ private fun TelegramScreen(
                 }
             }
             item {
-                Text("Supported Telegram commands", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Telegram commands", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 CommandRow("/tc help", "Show available commands")
                 CommandRow("/tc status", "Check whether this phone worker responds")
                 CommandRow("/tc projects", "List projects saved on this phone")
-                CommandRow("/tc ping", "Measure a simple bot-to-phone round trip")
+                CommandRow("/tc create <name>", "Create a project from Telegram")
+                CommandRow("/tc project <name>", "View project details and key count")
+                CommandRow("/tc ping", "Check the bot-to-phone response")
             }
             item {
                 Text(
@@ -832,7 +834,7 @@ private fun TelegramScreen(
 @Composable
 private fun CommandRow(command: String, description: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(command, color = Good, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(112.dp))
+        Text(command, color = Good, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(142.dp))
         Text(description, color = Muted, fontSize = 11.sp)
     }
 }
