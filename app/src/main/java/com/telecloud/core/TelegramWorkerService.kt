@@ -235,7 +235,7 @@ class TelegramWorkerService : Service() {
         val description = project.description.ifBlank { "No description" }
         val created = java.text.DateFormat.getDateTimeInstance()
             .format(java.util.Date(project.createdAt))
-        return "Project: \${project.name}\nDescription: $description\nAPI credentials: \${project.keys.size}\nCreated: $created"
+        return "Project: ${project.name}\nDescription: $description\nAPI credentials: ${project.keys.size}\nCreated: $created"
     }
 
     private fun createNotificationChannel() {
