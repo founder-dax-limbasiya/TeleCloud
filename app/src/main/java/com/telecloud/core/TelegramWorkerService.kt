@@ -109,8 +109,22 @@ class TelegramWorkerService : Service() {
         stopSelf(startId)
     }
 
+    private fun nextUpdateOffset(): Long {
+        val lastHandled = getSharedPreferences("telecloud_telegram_state", MODE_PRIVATE)
+            .getLong("last_handled_update_id", -1L)
+        return lastHandled + 1L
+    }
+
+    private fun acknowledgeUpdate(updateId: Long) {
+        // Persist before the next getUpdates call acknowledges this update to Telegram.
+        getSharedPreferences("telecloud_telegram_state", MODE_PRIVATE)
+            .edit()
+            .putLong("last_handled_update_id", updateId)
+            .commit()
+    }
+
     private suspend fun poll(token: String, allowedChatId: String) {
-        var offset = 0L
+        var offset = nextUpdateOffset()
         while (scope.isActive) {
             try {
                 val response = withContext(Dispatchers.IO) {
@@ -121,19 +135,29 @@ class TelegramWorkerService : Service() {
                     for (index in 0 until updates.length()) {
                         val update = updates.optJSONObject(index) ?: continue
                         val updateId = update.optLong("update_id", -1L)
-                        if (updateId >= 0L) offset = maxOf(offset, updateId + 1L)
-                        val message = update.optJSONObject("message") ?: continue
-                        val chat = message.optJSONObject("chat") ?: continue
-                        val incomingChatId = chat.optString("id")
-                        if (incomingChatId != allowedChatId) continue
+                        if (updateId < 0L) continue
 
-                        val text = message.optString("text").trim()
-                        if (!text.startsWith("/tc")) continue
-                        val command = text.removePrefix("/tc").trim().substringBefore("@").trim().lowercase()
-                        val reply = commandReply(command)
-                        withContext(Dispatchers.IO) {
-                            TelegramApi.sendMessage(token, incomingChatId, reply)
+                        val message = update.optJSONObject("message")
+                        val chat = message?.optJSONObject("chat")
+                        val incomingChatId = chat?.optString("id").orEmpty()
+                        if (incomingChatId == allowedChatId && message != null) {
+                            val incomingText = message.optString("text").trim()
+                            val commandToken = incomingText.substringBefore(" ")
+                            val baseCommand = commandToken.substringBefore("@")
+                            if (baseCommand.equals("/tc", ignoreCase = true)) {
+                                val payload = incomingText.removePrefix(commandToken).trim()
+                                val parts = payload.split(Regex("\\s+"), limit = 2)
+                                val command = parts.firstOrNull()?.lowercase().orEmpty()
+                                val arguments = parts.getOrNull(1).orEmpty().trim()
+                                val reply = commandReply(command, arguments)
+                                withContext(Dispatchers.IO) {
+                                    TelegramApi.sendMessage(token, incomingChatId, reply)
+                                }
+                            }
                         }
+
+                        acknowledgeUpdate(updateId)
+                        offset = maxOf(offset, updateId + 1L)
                     }
                 }
             } catch (_: Exception) {
@@ -142,10 +166,10 @@ class TelegramWorkerService : Service() {
         }
     }
 
-    private fun commandReply(command: String): String {
+    private fun commandReply(command: String, arguments: String): String {
         return when (command) {
             "", "help" -> {
-                "TeleCloud worker commands:\n/tc status\n/tc projects\n/tc ping\n/tc help"
+                "TeleCloud commands:\n/tc status\n/tc projects\n/tc create <name>\n/tc project <name>\n/tc ping\n/tc help"
             }
             "status" -> {
                 "TeleCloud worker is online on this Android device. This is a device worker, not a hosted VPS."
@@ -153,17 +177,55 @@ class TelegramWorkerService : Service() {
             "projects" -> {
                 val projects = ProjectStore(this).load()
                 if (projects.isEmpty()) {
-                    "No projects have been created on this device yet."
+                    "No projects have been created on this device yet. Send /tc create <name> to add one."
                 } else {
-                    "Projects on this device:\n" + projects.joinToString("\n") { "- " + it.name }
+                    "Projects on this device:\n" + projects.take(35).joinToString("\n") { "- " + it.name }
                 }
             }
+            "create" -> createProject(arguments)
+            "project" -> projectDetails(arguments)
             "ping" -> {
                 "Pong. Phone worker received your command at " +
                     java.text.DateFormat.getDateTimeInstance().format(java.util.Date()) + "."
             }
             else -> "Unknown command. Send /tc help for the available commands."
         }
+    }
+
+    private fun createProject(rawName: String): String {
+        val name = rawName.trim()
+        if (name.length !in 2..48 || name.any { it == '\n' || it == '\r' }) {
+            return "Project name must be 2 to 48 characters.\nUsage: /tc create My Project"
+        }
+
+        val store = ProjectStore(this)
+        val projects = store.load()
+        if (projects.any { it.name.equals(name, ignoreCase = true) }) {
+            return "A project named '$name' already exists. Send /tc projects to see your projects."
+        }
+
+        val project = TeleProject(
+            id = java.util.UUID.randomUUID().toString(),
+            name = name,
+            description = "Created via Telegram",
+            createdAt = System.currentTimeMillis(),
+            keys = emptyList()
+        )
+        store.save(projects + project)
+        return "Project created: $name\nYou can open it in TeleCloud to manage its details and API credentials."
+    }
+
+    private fun projectDetails(rawName: String): String {
+        val name = rawName.trim()
+        if (name.isBlank()) return "Usage: /tc project <name>"
+        val project = ProjectStore(this).load().firstOrNull {
+            it.name.equals(name, ignoreCase = true)
+        } ?: return "Project '$name' was not found. Send /tc projects to see available projects."
+
+        val description = project.description.ifBlank { "No description" }
+        val created = java.text.DateFormat.getDateTimeInstance()
+            .format(java.util.Date(project.createdAt))
+        return "Project: \${project.name}\nDescription: $description\nAPI credentials: \${project.keys.size}\nCreated: $created"
     }
 
     private fun createNotificationChannel() {
