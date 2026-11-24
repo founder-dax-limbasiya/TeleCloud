@@ -1,8 +1,8 @@
 # TeleCloud
 
-**Android-first, Telegram-assisted multi-project control and worker prototype.**
+**Android-first, Telegram-first multi-project control and worker prototype.**
 
-TeleCloud is an open-source experiment for managing multiple project workspaces from one Android app and using Telegram as a remote command channel. It is designed to avoid a paid VPS for the device-worker prototype.
+TeleCloud is an open-source experiment for managing multiple project workspaces from one Android app, with Telegram as its primary remote command channel. GitHub Actions support is an optional add-on; connecting GitHub is not required to use Telegram features.
 
 ## What is included in this first APK milestone
 
@@ -18,7 +18,7 @@ TeleCloud is an open-source experiment for managing multiple project workspaces 
   - `/tc projects`
   - `/tc ping`
 - GitHub Actions workflow that builds a debug APK and uploads it as a workflow artifact. No app deployment is configured.
-- GitHub Actions control screen: connect a repository with a fine-grained token, list workflows, inspect recent runs, and trigger workflows on a selected branch.
+- Optional GitHub Actions control screen: connect a repository with a fine-grained token, list workflows, inspect recent runs, and trigger workflows on a selected branch. Skip this entirely if you only want Telegram control.
 
 ## Important boundaries
 
@@ -34,7 +34,9 @@ This is an early device-worker prototype, **not a drop-in Oracle Cloud replaceme
 
 These boundaries are intentional: the first milestone proves project isolation, local credential handling, and Telegram command transport without pretending a phone or Telegram is an always-on VPS.
 
-## GitHub Actions setup
+## Optional GitHub Actions setup
+
+GitHub is not required for TeleCloud's Telegram bot or phone-worker features. Connect it only if you want to trigger and inspect GitHub Actions workflows from the app.
 
 1. Create a fine-grained personal access token in GitHub and restrict it to the repository you want to control.
 2. Grant **Actions: Read and write**. GitHub includes repository Metadata read access automatically.
